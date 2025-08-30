@@ -16,7 +16,7 @@ app = FastAPI()
 # --- CORS Configuration ---
 # Allows the frontend (running on a different port) to communicate with this backend.
 origins = [
-    "http://localhost:3000",
+    "https://crackbank-frontend.vercel.app",
     "http://localhost:5173", # Default for Vite React apps
 ]
 
