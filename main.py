@@ -92,12 +92,9 @@ async def check_breach(request: BreachCheckRequest):
 
 
 @app.post("/check-breach-hash")
-async def check_breach_hash(request: BreachCheckRequest):
-    """
-    Accepts a SHA-1 hash from frontend and compares against hashed leaked_details in the database.
-    """
-    user_hash = request.detail.lower()
-    if not user_hash or len(user_hash) != 40:  # SHA-1 length = 40 hex chars
+async def check_breach_hash(request: dict):
+    user_hash = request.get("hash", "").lower()
+    if not user_hash or len(user_hash) != 40:
         raise HTTPException(status_code=400, detail="Invalid SHA-1 hash provided.")
     
     found_breaches = []
@@ -111,15 +108,15 @@ async def check_breach_hash(request: BreachCheckRequest):
                     "risk_level": breach_info.get("risk_level"),
                     "description": breach_info.get("description"),
                 })
-    
-    time.sleep(1.5)  # simulate network latency
+
+    time.sleep(1.5)
     
     if found_breaches:
-        if request.email:
-            send_breach_notification(request.email, found_breaches)
+        email = request.get("email")
+        if email:
+            send_breach_notification(email, found_breaches)
         return {"breached": True, "breaches": found_breaches}
     return {"breached": False}
-
 
 @app.post("/summarize-breach")
 async def summarize_breach_with_ai(request: AISummaryRequest):
