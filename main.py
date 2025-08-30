@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from hashlib import sha1
 import uvicorn
 
 # Load environment variables
@@ -64,6 +65,9 @@ def read_root():
 
 @app.post("/check-breach")
 async def check_breach(request: BreachCheckRequest):
+    """
+    Direct match against raw leaked_details (for testing/demo).
+    """
     detail = request.detail
     if not detail or len(detail) < 8:
         raise HTTPException(status_code=400, detail="Invalid banking detail provided.")
@@ -85,6 +89,37 @@ async def check_breach(request: BreachCheckRequest):
             send_breach_notification(request.email, found_breaches)
         return {"breached": True, "breaches": found_breaches}
     return {"breached": False}
+
+
+@app.post("/check-breach-hash")
+async def check_breach_hash(request: BreachCheckRequest):
+    """
+    Accepts a SHA-1 hash from frontend and compares against hashed leaked_details in the database.
+    """
+    user_hash = request.detail.lower()
+    if not user_hash or len(user_hash) != 40:  # SHA-1 length = 40 hex chars
+        raise HTTPException(status_code=400, detail="Invalid SHA-1 hash provided.")
+    
+    found_breaches = []
+    for breach_name, breach_info in BREACH_DATABASE.items():
+        for leaked in breach_info.get("leaked_details", []):
+            leaked_hash = sha1(leaked.encode()).hexdigest()
+            if leaked_hash == user_hash:
+                found_breaches.append({
+                    "source": breach_name,
+                    "date": breach_info.get("date"),
+                    "risk_level": breach_info.get("risk_level"),
+                    "description": breach_info.get("description"),
+                })
+    
+    time.sleep(1.5)  # simulate network latency
+    
+    if found_breaches:
+        if request.email:
+            send_breach_notification(request.email, found_breaches)
+        return {"breached": True, "breaches": found_breaches}
+    return {"breached": False}
+
 
 @app.post("/summarize-breach")
 async def summarize_breach_with_ai(request: AISummaryRequest):
