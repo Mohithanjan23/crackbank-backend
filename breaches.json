@@ -15,7 +15,7 @@
     "description": "A popular online payment platform, PayBuddy, had a user database containing transaction histories and linked bank account IDs leaked on a dark web forum.",
     "leaked_details": [
       "AX12345B67",
-      "UPI-john@okbank",
+      "UPI-john@okaxis",
       "4567890123456789"
     ]
   },
