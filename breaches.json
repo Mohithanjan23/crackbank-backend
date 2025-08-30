@@ -1,0 +1,32 @@
+{
+  "Financore 2024 Leak": {
+    "date": "2024-03-15",
+    "risk_level": "High",
+    "description": "A major financial services provider, Financore, suffered a database breach exposing customer PII and credit card numbers.",
+    "leaked_details": [
+      "4567890123456789",
+      "DE89370400440532013000",
+      "user-fin-101"
+    ]
+  },
+  "PayBuddy User Dump": {
+    "date": "2023-11-01",
+    "risk_level": "Critical",
+    "description": "A popular online payment platform, PayBuddy, had a user database containing transaction histories and linked bank account IDs leaked on a dark web forum.",
+    "leaked_details": [
+      "AX12345B67",
+      "UPI-john@okbank",
+      "4567890123456789"
+    ]
+  },
+  "CryptoTrade Wallet Breach": {
+    "date": "2025-01-20",
+    "risk_level": "Medium",
+    "description": "An unsecured API endpoint in the CryptoTrade platform exposed user account IDs and associated UPI IDs.",
+    "leaked_details": [
+      "user-fin-101",
+      "UPI-jane@mybank",
+      "GB29NWBK60161331926819"
+    ]
+  }
+}
