@@ -1,23 +1,23 @@
 import os
 import json
 import time
+import requests
+from typing import Optional
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import requests
-from dotenv import load_dotenv
-from typing import Optional
+import uvicorn
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
 app = FastAPI()
 
 # --- CORS Configuration ---
-# Allows the frontend (running on a different port) to communicate with this backend.
 origins = [
     "https://crackbank-frontend.vercel.app",
-    "http://localhost:5173", # Default for Vite React apps
+    "http://localhost:5173",  # for local dev
 ]
 
 app.add_middleware(
@@ -28,17 +28,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Pydantic Models for Request Bodies ---
+# --- Models ---
 class BreachCheckRequest(BaseModel):
     detail: str
-    email: Optional[str] = None # Added optional email field for notifications
+    email: Optional[str] = None
 
 class AISummaryRequest(BaseModel):
     breach_data: list
 
-# --- Dummy Database Loading ---
+# --- Load breach database ---
 def load_breach_data():
-    """Loads the dummy breach data from a JSON file."""
     try:
         with open("breaches.json", "r") as f:
             return json.load(f)
@@ -47,130 +46,97 @@ def load_breach_data():
 
 BREACH_DATABASE = load_breach_data()
 
-# --- Helper Function for Email Notifications ---
+# --- Simulated email notification ---
 def send_breach_notification(email: str, breaches: list):
-    """
-    Simulates sending an email notification to the user about a data breach.
-    In a real application, this would use an email service like SendGrid or AWS SES.
-    For this demo, we'll just print to the console where the server is running.
-    """
-    print("\n--- SIMULATING EMAIL NOTIFICATION ---")
+    print("\n--- SIMULATED EMAIL NOTIFICATION ---")
     print(f"To: {email}")
     print("From: security@crack-bank.local")
-    print("Subject: URGENT: Security Alert - Your Banking Detail Found in Data Breach")
+    print("Subject: URGENT: Security Alert - Breach Detected")
     print("-" * 35)
-    print("We have detected that your banking detail was found in the following data breach(es):\n")
     for breach in breaches:
-        print(f"  - Source: {breach.get('source', 'N/A')}")
-        print(f"  - Date: {breach.get('date', 'N/A')}")
-    print("\nWe strongly recommend you take immediate action to secure your accounts.")
+        print(f"- Source: {breach.get('source','N/A')} | Date: {breach.get('date','N/A')}")
     print("--- END OF SIMULATED EMAIL ---\n")
 
-
-# --- API Endpoints ---
-
+# --- Routes ---
 @app.get("/")
 def read_root():
     return {"status": "Crack Bank API is running"}
 
 @app.post("/check-breach")
 async def check_breach(request: BreachCheckRequest):
-    """
-    Checks if a given banking detail is found in the simulated breach database.
-    If an email is provided and a breach is found, it triggers a simulated notification.
-    """
-    user_detail = request.detail
-    
-    # Basic validation
-    if not user_detail or len(user_detail) < 8:
+    detail = request.detail
+    if not detail or len(detail) < 8:
         raise HTTPException(status_code=400, detail="Invalid banking detail provided.")
-
-    found_breaches = []
     
-    # Simulate searching in the database
+    found_breaches = []
     for breach_name, breach_info in BREACH_DATABASE.items():
-        if any(user_detail == item for item in breach_info.get("leaked_details", [])):
+        if any(detail == item for item in breach_info.get("leaked_details", [])):
             found_breaches.append({
                 "source": breach_name,
                 "date": breach_info.get("date"),
                 "risk_level": breach_info.get("risk_level"),
                 "description": breach_info.get("description"),
             })
-
-    # Simulate network latency
-    time.sleep(2)
-
+    
+    time.sleep(1.5)  # simulate network latency
+    
     if found_breaches:
-        # If an email was provided in the request, trigger the simulated notification
         if request.email:
             send_breach_notification(request.email, found_breaches)
         return {"breached": True, "breaches": found_breaches}
-    else:
-        return {"breached": False}
+    return {"breached": False}
 
 @app.post("/summarize-breach")
 async def summarize_breach_with_ai(request: AISummaryRequest):
-    """
-    Uses the Gemini API to summarize breach details and suggest remediation steps.
-    """
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="Google API key not configured.")
-    
     if not request.breach_data:
         raise HTTPException(status_code=400, detail="No breach data provided.")
 
-    # Construct a detailed prompt for the AI
     breach_details_text = ""
     for i, breach in enumerate(request.breach_data, 1):
         breach_details_text += (
             f"Breach {i}:\n"
-            f"- Source: {breach.get('source', 'N/A')}\n"
-            f"- Date: {breach.get('date', 'N/A')}\n"
-            f"- Risk Level: {breach.get('risk_level', 'N/A')}\n"
-            f"- Description: {breach.get('description', 'N/A')}\n\n"
+            f"- Source: {breach.get('source','N/A')}\n"
+            f"- Date: {breach.get('date','N/A')}\n"
+            f"- Risk Level: {breach.get('risk_level','N/A')}\n"
+            f"- Description: {breach.get('description','N/A')}\n\n"
         )
-        
+
     system_prompt = (
-        "You are a world-class cybersecurity analyst. Your name is 'Cypher'. "
-        "You are providing a security briefing to a non-technical user whose banking information was found in a data breach. "
-        "Your tone should be serious, clear, and reassuring, like a security expert in a hacker movie. "
-        "Do not use emojis. Structure your response in Markdown."
+        "You are a world-class cybersecurity analyst named 'Cypher'. "
+        "Explain to a non-technical user whose banking information was found in a breach. "
+        "Keep it serious, clear, and actionable. Use Markdown headings."
     )
     
     user_prompt = (
-        f"My banking detail was found in the following data breach(es):\n\n"
-        f"{breach_details_text}"
-        f"First, provide a brief, one-paragraph summary of the situation and the overall risk. "
-        f"Then, provide a clear, actionable, and prioritized list of 3-5 security recommendations under a '## Recommended Actions' heading. "
-        f"For example: '1. Contact Your Bank Immediately', '2. Enable Two-Factor Authentication (2FA)'. "
-        f"Keep the language direct and easy to understand."
+        f"My banking detail was found in these breach(es):\n\n{breach_details_text}"
+        "Summarize the situation and provide a prioritized list of 3-5 recommended actions."
     )
-    
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key={api_key}"
-    
+
+    api_url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.5-flash-preview-05-20:generateContent?key={api_key}"
+    )
     payload = {
         "contents": [{"parts": [{"text": user_prompt}]}],
         "systemInstruction": {"parts": [{"text": system_prompt}]}
     }
 
     try:
-        response = requests.post(api_url, json=payload, headers={'Content-Type': 'application/json'})
-        response.raise_for_status()  # Raise an exception for bad status codes
-        result = response.json()
-        
+        resp = requests.post(api_url, json=payload, headers={'Content-Type': 'application/json'})
+        resp.raise_for_status()
+        result = resp.json()
         candidate = result.get("candidates", [{}])[0]
         content = candidate.get("content", {}).get("parts", [{}])[0].get("text", "")
-        
         if not content:
-            raise HTTPException(status_code=500, detail="Failed to get a valid response from AI model.")
-            
+            raise HTTPException(status_code=500, detail="AI model returned empty response.")
         return {"summary": content}
-
     except requests.exceptions.RequestException as e:
-        print(f"Error calling Gemini API: {e}")
-        raise HTTPException(status_code=503, detail=f"Error communicating with the AI service: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        raise HTTPException(status_code=500, detail="An internal error occurred while processing the AI summary.")
+        raise HTTPException(status_code=503, detail=f"Error communicating with AI service: {e}")
 
+# --- Entry point for Render ---
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
