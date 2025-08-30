@@ -4,9 +4,8 @@ import time
 import requests
 from typing import Optional
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from hashlib import sha1
 import uvicorn
 
@@ -18,9 +17,8 @@ app = FastAPI()
 # --- CORS Configuration ---
 origins = [
     "https://crackbank-frontend.vercel.app",
-    "http://localhost:5173",  # for local dev
+    "http://localhost:5173",  # local dev
 ]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -28,14 +26,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# --- Models ---
-class BreachCheckRequest(BaseModel):
-    detail: str
-    email: Optional[str] = None
-
-class AISummaryRequest(BaseModel):
-    breach_data: list
 
 # --- Load breach database ---
 def load_breach_data():
@@ -63,40 +53,20 @@ def send_breach_notification(email: str, breaches: list):
 def read_root():
     return {"status": "Crack Bank API is running"}
 
-@app.post("/check-breach")
-async def check_breach(request: BreachCheckRequest):
-    """
-    Direct match against raw leaked_details (for testing/demo).
-    """
-    detail = request.detail
-    if not detail or len(detail) < 8:
-        raise HTTPException(status_code=400, detail="Invalid banking detail provided.")
-    
-    found_breaches = []
-    for breach_name, breach_info in BREACH_DATABASE.items():
-        if any(detail == item for item in breach_info.get("leaked_details", [])):
-            found_breaches.append({
-                "source": breach_name,
-                "date": breach_info.get("date"),
-                "risk_level": breach_info.get("risk_level"),
-                "description": breach_info.get("description"),
-            })
-    
-    time.sleep(1.5)  # simulate network latency
-    
-    if found_breaches:
-        if request.email:
-            send_breach_notification(request.email, found_breaches)
-        return {"breached": True, "breaches": found_breaches}
-    return {"breached": False}
-
-
+# --- Hash-based breach check (used by App.jsx) ---
 @app.post("/check-breach-hash")
-async def check_breach_hash(request: dict):
-    user_hash = request.get("hash", "").lower()
+async def check_breach_hash(
+    hash: str = Body(..., embed=True),
+    last4: Optional[str] = Body(None),
+    email: Optional[str] = Body(None)
+):
+    """
+    Checks if SHA1 of provided detail matches any leaked detail in breaches.json.
+    """
+    user_hash = hash.lower().strip()
     if not user_hash or len(user_hash) != 40:
         raise HTTPException(status_code=400, detail="Invalid SHA-1 hash provided.")
-    
+
     found_breaches = []
     for breach_name, breach_info in BREACH_DATABASE.items():
         for leaked in breach_info.get("leaked_details", []):
@@ -109,25 +79,26 @@ async def check_breach_hash(request: dict):
                     "description": breach_info.get("description"),
                 })
 
-    time.sleep(1.5)
-    
+    time.sleep(1.2)  # simulate latency
+
     if found_breaches:
-        email = request.get("email")
         if email:
             send_breach_notification(email, found_breaches)
         return {"breached": True, "breaches": found_breaches}
     return {"breached": False}
 
+# --- Summarize with AI (unchanged) ---
 @app.post("/summarize-breach")
-async def summarize_breach_with_ai(request: AISummaryRequest):
+async def summarize_breach_with_ai(request: dict = Body(...)):
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="Google API key not configured.")
-    if not request.breach_data:
+    breach_data = request.get("breach_data")
+    if not breach_data:
         raise HTTPException(status_code=400, detail="No breach data provided.")
 
     breach_details_text = ""
-    for i, breach in enumerate(request.breach_data, 1):
+    for i, breach in enumerate(breach_data, 1):
         breach_details_text += (
             f"Breach {i}:\n"
             f"- Source: {breach.get('source','N/A')}\n"
@@ -141,7 +112,6 @@ async def summarize_breach_with_ai(request: AISummaryRequest):
         "Explain to a non-technical user whose banking information was found in a breach. "
         "Keep it serious, clear, and actionable. Use Markdown headings."
     )
-    
     user_prompt = (
         f"My banking detail was found in these breach(es):\n\n{breach_details_text}"
         "Summarize the situation and provide a prioritized list of 3-5 recommended actions."
